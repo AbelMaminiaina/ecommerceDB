@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Catégories de produits (table dynamique)
+model Category {
+  id          String    @id @default(uuid())
+  name        String    // Nom affiché (ex: "Œufs frais")
+  slug        String    @unique // Identifiant URL (ex: "oeufs-frais")
+  description String?
+  image       String?
+  order       Int       @default(0) // Ordre d'affichage
+  isActive    Boolean   @default(true)
+
+  products    Product[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("categories")
+}
+
+// Badges des produits
+enum ProductBadge {
+  bio
+  plein_air
+  nouveau
+  promo
+  populaire
+}
+
+// Nature du produit (remplace l'ancien test de catégorie en dur côté frontend)
+enum ProductType {
+  vif   // animal vendu vivant
+  piece // vendu à la pièce (découpe, poisson, œufs, accessoire…)
+}
+
+// Produits
+model Product {
+  id               String           @id @default(uuid())
+  name             String
+  slug             String           @unique
+  category         String           // Slug de catégorie (underscores), libre — voir table Category
+  categoryId       String?          // Nouvelle relation
+  categoryRef      Category?        @relation(fields: [categoryId], references: [id])
+  description      String
+  shortDescription String
+  price            Int              // Prix en Ariary
+  originalPrice    Int?             // Prix original (pour les promos)
+  images           String[]
+  inStock          Boolean          @default(true)
+  stockQuantity    Int              @default(0)
+  isActive         Boolean          @default(true)  // Masquer du catalogue sans supprimer
+  badges           ProductBadge[]
+  characteristics  String[]
+
+  // Nature + logistique
+  productType       ProductType     @default(piece)
+  estimatedWeightKg Float?          // Poids estimé indicatif — n'entre JAMAIS dans le calcul du prix
+  freeShipping      Boolean         @default(false) // Si true, la commande contenant ce produit est livrée gratuitement
+  availableFrom     DateTime?       // Date de disponibilité — avant cette date le client peut réserver (précommande)
+
+  // Metadata (pour les œufs fécondés et poules)
+  race             String?
+  eggColor         String?
+  quantity         Int?             // Pour les boîtes d'œufs
+  dimensions       String?          // Pour les accessoires
+  weight           String?          // Pour les accessoires
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  orderItems       OrderItem[]
+
+  @@map("products")
+}
+
+// Races de poules
+model ChickenBreed {
+  id                 String   @id @default(uuid())
+  name               String
+  slug               String   @unique
+  image              String
+  galleryImages      String[]
+  eggColor           String
+  eggColorHex        String
+  temperament        String
+  productivity       String   // faible, moyenne, élevée, très-élevée
+  productivityNumber Int
+  eggsPerYear        String
+  description        String
+  characteristics    String[]
+  whyChoose          String
+  origin             String
+  weight             String
+  available          Boolean  @default(true)
+  price              Int      // Prix en Ariary
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("chicken_breeds")
+}
+
+// Clients
+model Customer {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  firstName String
+  lastName  String
+  phone     String?
+
+  addresses Address[]
+  orders    Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("customers")
+}
+
+// Adresses
+model Address {
+  id         String  @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  street     String
+  city       String
+  postalCode String
+  country    String  @default("Madagascar")
+  isDefault  Boolean @default(false)
+
+  orders     Order[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("addresses")
+}
+
+// Statut des commandes
+enum OrderStatus {
+  pending
+  confirmed
+  processing
+  shipped
+  delivered
+  cancelled
+}
+
+// Méthode de livraison
+enum DeliveryMethod {
+  standard
+  express
+  retrait
+}
+
+// Commandes
+model Order {
+  id             String         @id @default(uuid())
+  orderNumber    String         @unique
+  customerId     String
+  customer       Customer       @relation(fields: [customerId], references: [id])
+  addressId      String
+  address        Address        @relation(fields: [addressId], references: [id])
+
+  status         OrderStatus    @default(pending)
+  deliveryMethod DeliveryMethod
+
+  subtotal       Int            // Prix en Ariary
+  shippingCost   Int            // Prix en Ariary
+  total          Int            // Prix en Ariary
+
+  notes          String?
+  cancelReason   String?
+
+  items          OrderItem[]
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@map("orders")
+}
+
+// Items de commande
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  quantity  Int
+  price     Int       // Prix unitaire en Ariary au moment de la commande
+  availableFrom DateTime? // Date de disponibilité du produit figée au moment de la commande (réservation / précommande)
+
+  createdAt DateTime @default(now())
+
+  @@map("order_items")
+}
+
+// Newsletter
+model NewsletterSubscriber {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("newsletter_subscribers")
+}
+
+// Messages de contact
+model ContactMessage {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String
+  isRead    Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@map("contact_messages")
+}
